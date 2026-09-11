@@ -35,6 +35,10 @@ jobs:
       - name: Setup Pages
         id: setup_pages
         uses: actions/configure-pages@v5
+        with:
+          # First run on this repo: Pages isn't enabled yet, so let this
+          # action create the "build via GitHub Actions" Pages site itself.
+          enablement: true
 
       - name: Build static export
         working-directory: lifeshape-app
