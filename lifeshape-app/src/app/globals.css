@@ -1,0 +1,51 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #f5f5f7;
+  --color-surface: #ffffff;
+  --color-ink: #1d1d1f;
+  --color-ink-secondary: #6e6e73;
+  --color-ink-tertiary: #86868b;
+  --color-divider: #d2d2d7;
+  --color-accent: #0071e3;
+  --color-accent-hover: #0077ed;
+  --color-success: #1a8c3f;
+  --color-success-soft: #e6f7e9;
+  --color-danger: #d70015;
+  --color-danger-soft: #ffece8;
+  --color-ring-a: #ff8a3d;
+  --color-ring-a-soft: #fff1e6;
+  --color-ring-b: #34c759;
+  --color-ring-b-soft: #dcefe0;
+  --color-ring-c: #af52de;
+  --color-ring-c-soft: #ece0f5;
+
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Arial,
+    sans-serif;
+}
+
+html {
+  background: var(--color-bg);
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+/* Links inherit color by default (this is an app UI, not prose) — pages set
+   text-accent explicitly on the few spots that should read as a link. Layered
+   so any Tailwind color utility placed directly on a link (or its children)
+   still wins over this default. */
+@layer base {
+  a {
+    color: inherit;
+    text-decoration: inherit;
+  }
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
