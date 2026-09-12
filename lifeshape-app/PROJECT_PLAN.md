@@ -80,8 +80,8 @@ Cada etapa abaixo passa pelas mesmas 4 fases antes de eu marcar como pronta:
 |---|---|---|---|
 | 0 | ✅ Fundação | ClassroomIO rodando e acessível, org Lifeshape criada, chave de API gerada, cliente HTTP no Next.js — testado ponta a ponta, `/security-review` passou (1 achado alto corrigido: rota de debug sem autenticação foi removida) | Decisão #1 |
 | 1 | ✅ Autenticação real | Login/logout, primeiro acesso via convite (cria conta + matricula numa tacada só), esqueci/redefinir senha, persona salva de verdade em `profile.metadata`. Sessão do Next.js é um JWE (cookie httpOnly próprio, nunca o cookie do ClassroomIO) guardando só o bearer token do ClassroomIO. Testado ponta a ponta com Playwright contra os dois servidores reais. `/security-review` nos dois repos achou e corrigiu 1 alto (ClassroomIO: convite com múltiplos e-mails permitidos deixava qualquer um da lista criar a conta de *outro* da lista — corrigido exigindo convite de e-mail único pra criar conta) e 1 baixo (Next.js: cookie de sessão era só assinado, não criptografado de fato — trocado pra JWE de verdade). `/admin` continua sem nenhuma autenticação — aceitável por enquanto (dado 100% fictício, escopo é a Etapa 9), mas fica registrado aqui pra não esquecer quando os dados de admin virarem reais | Decisão #2 |
-| 2 | Cursos e aulas | Trocar mock por dados reais; estender API pra trazer módulos/lições/conteúdo de aula | Etapa 0, 1 |
-| 3 | Presença automática | Novo endpoint público de presença no ClassroomIO + consumo no Next.js | Etapa 2 |
+| 2 | Cursos e aulas | Trocar mock por dados reais; estender API pra trazer módulos/lições/conteúdo de aula — os 4 cursos de exemplo já têm módulo/aula reais no ClassroomIO (curso → `course_section` → `lesson`, mesmos títulos/textos do `data.ts` aprovado), sem vídeo/material de verdade ainda (você disse que vai inserir depois) | Etapa 0, 1 |
+| 3 | Presença automática | **Regra de negócio já adiantada por você**: não é um único critério fixo — precisa ser configurável por curso/turma. Ex.: check-in físico na entrada marca presença automática (alguém confere que a pessoa veio de verdade); OU sem check-in, algum outro critério (assistiu a aula?); e sempre precisa existir também um modo 100% manual por cima, pra corrigir/lançar na mão quando for o caso. Endpoint público de presença no ClassroomIO + consumo no Next.js, mas o desenho já entra sabendo que precisa suportar mais de um "modo" de contar presença, não só um automatismo único | Etapa 2 |
 | 4 | Avaliações e notas | Novo endpoint de submissão/nota + tela de exercício real | Etapa 2 |
 | 5 | Jornada/timeline | Agregação dos dados já trazidos (sem API nova) | Etapas 2-4 |
 | 6 | Gamificação | Tabelas novas (pontos, streak, nível, emblemas, ranking) + rotas `/public-api/v1/gamification/*` | Decisão de regras de pontuação |
@@ -132,6 +132,18 @@ Anotado aqui pra não redescobrir na marra na próxima vez.
     schema mas a Etapa 1 exige convite de e-mail único — ver achado de
     segurança na tabela acima). Link pro aluno:
     `http://localhost:3000/convite/<token>`.
+11. Conteúdo de exemplo: os 4 cursos citados no `data.ts` existem de
+    verdade no ClassroomIO local (`Gestão e Liderança`, `Fundamentos da
+    Fé`, `Impacto 2025 — Preparação de Equipe`, `Fundamentos para Líderes
+    de Casa`), cada um com seu próprio `group` (nunca compartilhar group
+    entre cursos — é o roster de UM curso, não uma "turma" que atravessa
+    vários; compartilhar quebrou matrícula durante o teste da Etapa 1) e
+    módulos/aulas reais (`course_section`/`lesson`) com os mesmos
+    títulos/textos do mock aprovado — sem vídeo/documento de verdade
+    ainda. Sem UI de conteúdo ainda (isso é a Etapa 2), então foi um
+    script SQL direto; se o banco for resetado, o script não foi
+    commitado neste repo (é conteúdo, não schema) — dá pra reconstruir
+    fila por fila a partir do `data.ts` se precisar.
 
 **`lifeshape-app`**: `CLASSROOMIO_API_URL`, `CLASSROOMIO_API_KEY` e (desde a
 Etapa 1) `SESSION_SECRET` em `.env.local` (nunca committado — ver
