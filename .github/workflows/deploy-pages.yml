@@ -1,8 +1,11 @@
 name: Deploy Lifeshape App to GitHub Pages
 
+# Manual only from here on: the app stopped being a static export once real
+# ClassroomIO integration started (needs a live server, not GitHub Pages).
+# The last automatic deploy is still live at https://jaomarks.github.io/Jaomarks/
+# as a frozen snapshot of the pitch prototype. Re-add the `push` trigger only
+# if you deliberately want to publish another static snapshot.
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
