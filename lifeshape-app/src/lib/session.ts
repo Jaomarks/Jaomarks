@@ -1,22 +1,37 @@
 import "server-only";
 
-import { SignJWT, jwtVerify } from "jose";
+import { EncryptJWT, jwtDecrypt } from "jose";
 import { cookies } from "next/headers";
 
 // This app's own session cookie. Holds only the ClassroomIO bearer token
 // (see PROJECT_PLAN.md — Etapa 1) — never the student's e-mail, name, or
 // any other detail, per Next.js's own session guidance (keep the payload
-// minimal). Encrypted with a secret that is NEVER shared with ClassroomIO:
-// this cookie only makes sense to this app.
+// minimal). A JWE (genuinely encrypted, not just signed) with a secret that
+// is NEVER shared with ClassroomIO: this cookie only makes sense to this
+// app. httpOnly already keeps browser JS out and `secure` keeps it off
+// plain HTTP in production, but the payload is a live bearer credential —
+// encrypting it too means a copy of the raw cookie value on its own
+// (a logging proxy, a cookie-reading browser extension, a DevTools
+// screenshot) isn't enough to read that token back out.
 const COOKIE_NAME = "lifeshape_session";
 const MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days — matches ClassroomIO's own session.expiresIn (auth.ts)
+const JWE_ALG = "dir"; // direct use of the key below — no per-token key wrapping needed for a symmetric secret
+const JWE_ENC = "A256GCM"; // needs a 32-byte key, exactly what SESSION_SECRET decodes to
 
 function getSecretKey(): Uint8Array {
   const secret = process.env.SESSION_SECRET?.trim();
   if (!secret) {
     throw new Error("SESSION_SECRET must be set (see .env.example).");
   }
-  return new TextEncoder().encode(secret);
+  // SESSION_SECRET is base64 (see .env.example: `openssl rand -base64 32`)
+  // — decode it back to the 32 raw bytes A256GCM requires, rather than
+  // encoding the base64 *text* itself (which would be the wrong length and
+  // throw at encrypt() time).
+  const key = new Uint8Array(Buffer.from(secret, "base64"));
+  if (key.byteLength !== 32) {
+    throw new Error("SESSION_SECRET must decode (from base64) to exactly 32 bytes — generate with: openssl rand -base64 32");
+  }
+  return key;
 }
 
 export type SessionPayload = {
@@ -24,11 +39,11 @@ export type SessionPayload = {
 };
 
 async function encrypt(payload: SessionPayload): Promise<string> {
-  return new SignJWT(payload)
-    .setProtectedHeader({ alg: "HS256" })
+  return new EncryptJWT(payload)
+    .setProtectedHeader({ alg: JWE_ALG, enc: JWE_ENC })
     .setIssuedAt()
     .setExpirationTime(`${MAX_AGE_SECONDS}s`)
-    .sign(getSecretKey());
+    .encrypt(getSecretKey());
 }
 
 /**
@@ -39,7 +54,7 @@ export async function decryptSessionCookie(cookieValue: string | undefined): Pro
   if (!cookieValue) return null;
 
   try {
-    const { payload } = await jwtVerify(cookieValue, getSecretKey(), { algorithms: ["HS256"] });
+    const { payload } = await jwtDecrypt(cookieValue, getSecretKey());
     if (typeof payload.classroomioToken !== "string" || !payload.classroomioToken) {
       return null;
     }

@@ -50,12 +50,9 @@ novo no ClassroomIO", não só "consumir o que já existe".
 
 1. ~~**Onde o ClassroomIO vai rodar**~~ — **Resolvido**: local, por enquanto
    (ver seção 5-bis). Produção fica pra decidir mais pra frente.
-2. **Login de aluno**: a API pública é autenticada por chave de admin da
-   organização, não por sessão de aluno. Pra aluno logar de verdade no
-   Next.js e ver só o que é dele, as opções são: (a) estender a API pública
-   com um endpoint de login/sessão de aluno, (b) rodar o Next.js no mesmo
-   domínio do ClassroomIO pra reaproveitar o cookie de sessão dele, ou
-   (c) usar SSO. Decide isso na Etapa 1.
+2. ~~**Login de aluno**~~ — **Resolvido**: estendemos a API do ClassroomIO
+   (Etapa 1) em vez de reaproveitar cookie/domínio ou usar SSO pago — ver a
+   linha da Etapa 1 na tabela abaixo e a seção 5-bis para os detalhes.
 3. **Licença AGPL**: como agora vai ser integração de verdade (não só
    inspiração visual), qualquer modificação no código do ClassroomIO rodando
    como serviço pros alunos, pela AGPL, precisa ter o código-fonte
@@ -82,7 +79,7 @@ Cada etapa abaixo passa pelas mesmas 4 fases antes de eu marcar como pronta:
 | # | Etapa | O que muda | Depende de |
 |---|---|---|---|
 | 0 | ✅ Fundação | ClassroomIO rodando e acessível, org Lifeshape criada, chave de API gerada, cliente HTTP no Next.js — testado ponta a ponta, `/security-review` passou (1 achado alto corrigido: rota de debug sem autenticação foi removida) | Decisão #1 |
-| 1 | Autenticação real | Login de aluno de verdade, sessão persistente, perfil (persona) salvo | Decisão #2 |
+| 1 | ✅ Autenticação real | Login/logout, primeiro acesso via convite (cria conta + matricula numa tacada só), esqueci/redefinir senha, persona salva de verdade em `profile.metadata`. Sessão do Next.js é um JWE (cookie httpOnly próprio, nunca o cookie do ClassroomIO) guardando só o bearer token do ClassroomIO. Testado ponta a ponta com Playwright contra os dois servidores reais. `/security-review` nos dois repos achou e corrigiu 1 alto (ClassroomIO: convite com múltiplos e-mails permitidos deixava qualquer um da lista criar a conta de *outro* da lista — corrigido exigindo convite de e-mail único pra criar conta) e 1 baixo (Next.js: cookie de sessão era só assinado, não criptografado de fato — trocado pra JWE de verdade). `/admin` continua sem nenhuma autenticação — aceitável por enquanto (dado 100% fictício, escopo é a Etapa 9), mas fica registrado aqui pra não esquecer quando os dados de admin virarem reais | Decisão #2 |
 | 2 | Cursos e aulas | Trocar mock por dados reais; estender API pra trazer módulos/lições/conteúdo de aula | Etapa 0, 1 |
 | 3 | Presença automática | Novo endpoint público de presença no ClassroomIO + consumo no Next.js | Etapa 2 |
 | 4 | Avaliações e notas | Novo endpoint de submissão/nota + tela de exercício real | Etapa 2 |
@@ -122,14 +119,39 @@ Anotado aqui pra não redescobrir na marra na próxima vez.
    (`cio_api_<24 bytes base64url>`, hash sha256 hex, scope `public_api:*`) —
    o normal, quando a UI de Automation estiver acessível, é gerar pela tela
    Settings → Automation → API.
+9. Desde a Etapa 1: `TRUSTED_ORIGINS` em `apps/api/.env` precisa incluir a
+   origem do Next.js (`http://localhost:3000` local) — sem isso o link de
+   "esqueci minha senha" quebra no passo do redirect (Better Auth rejeita
+   `callbackURL` fora de `trustedOrigins`). `LIFESHAPE_APP_URL` também
+   precisa apontar pro Next.js (mesmo motivo: monta o link do e-mail).
+10. Convite de teste: como ainda não existe UI de admin nem no ClassroomIO
+    nem no Next.js pra gerar convite (isso é Etapa 9), um convite de teste
+    hoje é um insert direto em `course_invite` — token = 32 bytes
+    aleatórios em base64url, `token_hash` = sha256 hex dele,
+    `allowed_emails` com **um só** e-mail (múltiplos é suportado pelo
+    schema mas a Etapa 1 exige convite de e-mail único — ver achado de
+    segurança na tabela acima). Link pro aluno:
+    `http://localhost:3000/convite/<token>`.
 
-**`lifeshape-app`**: `CLASSROOMIO_API_URL` e `CLASSROOMIO_API_KEY` em
-`.env.local` (nunca committado — ver `.env.example`). `npm run dev` — repara
-que não é mais export estático (`next.config.ts` mudou nesta etapa), então
-isso já roda com Server Components/rotas dinâmicas de verdade.
+**`lifeshape-app`**: `CLASSROOMIO_API_URL`, `CLASSROOMIO_API_KEY` e (desde a
+Etapa 1) `SESSION_SECRET` em `.env.local` (nunca committado — ver
+`.env.example`; `SESSION_SECRET` é `openssl rand -base64 32`, só desse app,
+nunca do ClassroomIO). `npm run dev` — repara que não é mais export estático
+(`next.config.ts` mudou na Etapa 0), então isso já roda com Server
+Components/rotas dinâmicas de verdade.
+
+⚠️ **Pegadinha que já mordeu uma vez**: se `SESSION_SECRET` (ou qualquer
+env var que devia vir só do `.env.local`) estiver de alguma forma exportada
+no shell que sobe o `npm run dev`, ela silenciosamente ganha prioridade
+sobre o `.env.local` — comportamento padrão de todo carregador de dotenv,
+não é bug do Next.js. Sintoma: login/sessão falha com um erro genérico sem
+motivo aparente. `echo $SESSION_SECRET` (ou a env var em questão) antes de
+subir o servidor pra confirmar que está vazio, e/ou `env -u SESSION_SECRET
+npm run dev`.
 
 ## 6. Próximo passo imediato
 
-Etapa 0 fechada. Próximo é o brainstorm da Decisão #2 (Etapa 1 — como o
-aluno vai logar de verdade, já que a public API só tem chave de admin da
-organização, não sessão por aluno).
+Etapa 1 fechada. Próximo é o brainstorm da Etapa 2 (Cursos e aulas — trocar
+o mock de `src/lib/data.ts` por dados reais do ClassroomIO; a public API
+de hoje só tem `courses`/`audience`, então parte da etapa é estender ela
+com módulos/lições/conteúdo de aula).
