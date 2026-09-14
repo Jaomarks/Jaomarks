@@ -81,7 +81,7 @@ Cada etapa abaixo passa pelas mesmas 4 fases antes de eu marcar como pronta:
 | 0 | ✅ Fundação | ClassroomIO rodando e acessível, org Lifeshape criada, chave de API gerada, cliente HTTP no Next.js — testado ponta a ponta, `/security-review` passou (1 achado alto corrigido: rota de debug sem autenticação foi removida) | Decisão #1 |
 | 1 | ✅ Autenticação real | Login/logout, primeiro acesso via convite (cria conta + matricula numa tacada só), esqueci/redefinir senha, persona salva de verdade em `profile.metadata`. Sessão do Next.js é um JWE (cookie httpOnly próprio, nunca o cookie do ClassroomIO) guardando só o bearer token do ClassroomIO. Testado ponta a ponta com Playwright contra os dois servidores reais. `/security-review` nos dois repos achou e corrigiu 1 alto (ClassroomIO: convite com múltiplos e-mails permitidos deixava qualquer um da lista criar a conta de *outro* da lista — corrigido exigindo convite de e-mail único pra criar conta) e 1 baixo (Next.js: cookie de sessão era só assinado, não criptografado de fato — trocado pra JWE de verdade). `/admin` continua sem nenhuma autenticação — aceitável por enquanto (dado 100% fictício, escopo é a Etapa 9), mas fica registrado aqui pra não esquecer quando os dados de admin virarem reais | Decisão #2 |
 | 2 | ✅ Cursos e aulas reais | Mock trocado por dados reais nas telas de curso/aula. Novo `/public-api/student/*` no ClassroomIO (mesma postura de acesso da Etapa 1: bearer token do aluno, sem chave de organização) reaproveitando os serviços internos maduros do próprio ClassroomIO (conteúdo agrupado por módulo, regras de progressão, certificação) em vez de reinventar. `home`, `cursos`, `cursos/[slug]` e a aula (`cursos/[slug]/[lessonId]`) reescritos pra buscar dados reais via `requireSession()`. Testado ponta a ponta com Playwright contra os servidores reais: catálogo só mostra curso em que o aluno está matriculado de fato, "próxima aula" e progresso na home são reais, os 3 módulos/14 aulas de "Gestão e Liderança" aparecem certos, marcar/desmarcar aula concluída persiste de verdade (sobrevive a reload). `/security-review` nos dois repos achou 3 candidatos; 1 confirmado e corrigido (ClassroomIO: curso apagado por um admin — soft delete, `status='DELETED'` — continuava 100% legível e completável por quem já estava matriculado, podendo até emitir certificado de um curso que a organização tirou do ar; corrigido checando `status = 'ACTIVE'` no mesmo lugar que já checa matrícula), 2 descartados após verificação (um 404 diferenciado que confirma a existência de uma aula sem dar acesso a ela — real, mas abaixo da régua por UUID não ser adivinhável; e uma suspeita de que a conclusão manual não respeitava `completionPolicy` de vídeo, que na prática já era bloqueada com 400, ponta a ponta). Gamificação (sementes/streak/nível/anéis), categoria/turma/ícone por curso e "presença confirmada" continuam mock/ausentes de propósito — sem equivalente real ainda ou são escopo de etapa futura (documentado no código) | Etapa 0, 1 |
-| 3 | Presença automática | **Regra de negócio já adiantada por você**: não é um único critério fixo — precisa ser configurável por curso/turma. Ex.: check-in físico na entrada marca presença automática (alguém confere que a pessoa veio de verdade); OU sem check-in, algum outro critério (assistiu a aula?); e sempre precisa existir também um modo 100% manual por cima, pra corrigir/lançar na mão quando for o caso. Endpoint público de presença no ClassroomIO + consumo no Next.js, mas o desenho já entra sabendo que precisa suportar mais de um "modo" de contar presença, não só um automatismo único | Etapa 2 |
+| 3 | 🚧 Presença | Configurável por curso: métodos de check-in habilitáveis (botão do aluno, QR code, lançamento manual na portaria) + exige aprovação do professor ou não. Sequência (streak) por aula, não por calendário. Ver especificação completa na seção 5-ter | Etapa 2 |
 | 4 | Avaliações e notas | Novo endpoint de submissão/nota + tela de exercício real | Etapa 2 |
 | 5 | Jornada/timeline | Agregação dos dados já trazidos (sem API nova) | Etapas 2-4 |
 | 6 | Gamificação | Tabelas novas (pontos, streak, nível, emblemas, ranking) + rotas `/public-api/v1/gamification/*` | Decisão de regras de pontuação |
@@ -168,15 +168,35 @@ motivo aparente. `echo $SESSION_SECRET` (ou a env var em questão) antes de
 subir o servidor pra confirmar que está vazio, e/ou `env -u SESSION_SECRET
 npm run dev`.
 
+## 5-ter. Etapa 3 — Presença: especificação (brainstorm com você, 2026-09-14)
+
+**Os 3 segmentos e como presença funciona pra cada um** (mesmo motor, configurado diferente por curso):
+
+| Segmento | Curso | Cadência | Como confirma presença |
+|---|---|---|---|
+| Universitários (Lifeshapers) | Liderança, 3 anos | pode ser só 1 aula/mês | Aluno aperta botão no app → fica **pendente** até o professor aprovar → só then conta |
+| Profissionais cristãos | curso curto, 3 módulos, com encontros presenciais | — | Confirma automático ao "participar" (sem aprovação extra) |
+| Pastores | mentoria pastoral | encontros mensais | Confirma automático ao "participar" (igual profissionais) |
+
+**Métodos de check-in** — não é "escolha 1 pra sempre", é uma lista de métodos habilitados por curso, o coordenador decide quais valem pra cada turma:
+- Botão do próprio aluno no app ("apertar e confirmar presença").
+- QR code escaneado na entrada.
+- Lançamento manual por quem está na portaria/professor.
+
+Cada curso tem dois parâmetros independentes: **quais métodos estão ligados** (pode ser mais de um ao mesmo tempo) e **precisa de aprovação do professor ou vale na hora**. Universitários = botão ligado + aprovação obrigatória. Profissionais/pastores = qualquer método ligado + sem aprovação (confirma na hora).
+
+**Sequência (streak)**: não conta por dia/semana de calendário — conta por **aula consecutiva do próprio curso**, porque a cadência varia demais (universitário só tem 1 aula/mês). Falta quebra a sequência. O coordenador pode "restaurar": na prática isso é só ele lançar manualmente a presença daquela aula passada que faltou — o sistema recalcula a sequência sozinho a partir dos registros reais, não existe um "valor de sequência" guardado separado pra desincronizar da realidade.
+
+**Decisão técnica**: reaproveitar a tabela `group_attendance` que **já existe** no ClassroomIO (usada hoje só pelo professor marcando manualmente presença por aula, sem workflow nenhum) em vez de criar uma paralela — estendendo com as colunas que faltam (status pendente/confirmado/recusado, método usado, quem aprovou). Sequência é sempre calculada na hora a partir dos registros reais (o mesmo estilo já usado pra progresso de curso), não um contador mantido à parte.
+
+**Ficou de fora desta etapa, decisão em aberto**: a parte de **estágio obrigatório** (aluno manda relatório + comprovante, coordenador aprova quantidade de semanas como horas complementares) que você mencionou junto com presença. Não é o mesmo formato de dado (é submissão + aprovação de quantidade, não check-in de aula) — se parece mais com o que a Etapa 4 (Avaliações e notas) já ia construir (submissão do aluno → aprovação/nota de um professor). Minha sugestão: construir presença primeiro (esta etapa), e tratar estágio como parte da Etapa 4 ou como uma etapa própria depois — me avisa se prefere diferente.
+
+**Não entra nesta etapa**: uma tela de coordenador/professor de verdade no Next.js (aprovar pendências, gerar QR, marcar manual) — isso é painel administrativo, Etapa 9. As ações do lado do professor/coordenador viram endpoints reais e seguros no ClassroomIO (prontos pra qualquer front consumir depois), mas sem tela nova agora — mesmo padrão já usado nas Etapas 1/2 pro lado admin (convite/conteúdo de curso também não têm tela ainda).
+
 ## 6. Próximo passo imediato
 
-Etapa 2 fechada. Próximo é o brainstorm da Etapa 3 (Presença automática).
-Regra de negócio já adiantada por você (ver linha da Etapa 3 na tabela):
-não é um critério único — precisa ser configurável por curso/turma (ex.:
-check-in físico na entrada alimentando presença automática, com um modo
-100% manual sempre disponível por cima). Falta destrinchar com você antes
-de codar: quem define a configuração (por curso? por turma? por
-organização?), o que "check-in físico" significa em termos de dado (um
-QR code escaneado na entrada? um app separado? lançamento manual de quem
-está na portaria?), e se falta de presença deve afetar progresso/
-gamificação automaticamente ou só fica registrada pra alguém decidir depois.
+Brainstorm da Etapa 3 feito (seção 5-ter) — construindo agora: schema
+(estender `group_attendance` + config por curso), serviços/rotas no
+ClassroomIO (aluno confirma, professor aprova/marca manual, sequência),
+depois o lado aluno no Next.js (botão de confirmar presença + sequência
+real na home/conquistas).
