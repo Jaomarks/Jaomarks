@@ -8,7 +8,7 @@ import { decryptSessionCookie, SESSION_COOKIE_NAME } from "@/lib/session";
 // src/lib/dal.ts (requireSession) and runs in the pages/actions themselves;
 // this only pre-filters the obvious case (no cookie at all) so a logged-out
 // visitor doesn't even reach a protected page. Never trust this alone.
-const PROTECTED_PREFIXES = ["/home", "/cursos", "/jornada", "/conquistas", "/comunidade", "/loja"];
+const PROTECTED_PREFIXES = ["/home", "/cursos", "/jornada", "/conquistas", "/comunidade", "/loja", "/checkin"];
 
 // The persona picker (root) also requires a session, but has its own exact
 // match (no sub-paths).

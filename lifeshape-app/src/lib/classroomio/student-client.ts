@@ -119,6 +119,33 @@ export type StudentLesson = {
 
 export type LessonCompletion = { isComplete: boolean };
 
+// --- Etapa 3: presença ---
+
+export type CheckinMethod = "self_button" | "qr_code" | "manual_desk";
+
+export type AttendanceRecord = {
+  id: number;
+  lessonId: string;
+  isPresent: boolean;
+  status: "pending" | "confirmed" | "rejected";
+  method: CheckinMethod | null;
+};
+
+export type AttendanceSummary = {
+  checkinMethods: CheckinMethod[];
+  requiresApproval: boolean;
+  currentStreak: number;
+  longestStreak: number;
+  lessons: {
+    lessonId: string;
+    title: string;
+    lessonAt: string | null;
+    status: "pending" | "confirmed" | "rejected" | null;
+    isPresent: boolean;
+    method: CheckinMethod | null;
+  }[];
+};
+
 /** Courses the current student is enrolled in. */
 export function listMyCourses(token: string) {
   return request<StudentCourseSummary[]>("/public-api/student/courses", token);
@@ -140,4 +167,24 @@ export function setLessonCompletion(token: string, lessonId: string, isComplete:
     method: "POST",
     body: JSON.stringify({ isComplete }),
   });
+}
+
+/** Attendance config, streak, and per-lesson status for the current student in a course. */
+export function getMyAttendance(token: string, courseId: string) {
+  return request<AttendanceSummary>(`/public-api/student/courses/${encodeURIComponent(courseId)}/attendance`, token);
+}
+
+/** Confirms the current student's own presence at a lesson (self_button or qr_code — never manual_desk, that's staff-only). */
+export function confirmMyAttendance(
+  token: string,
+  courseId: string,
+  lessonId: string,
+  method: "self_button" | "qr_code",
+  qrPayload?: string,
+) {
+  return request<AttendanceRecord>(
+    `/public-api/student/courses/${encodeURIComponent(courseId)}/lessons/${encodeURIComponent(lessonId)}/attendance`,
+    token,
+    { method: "POST", body: JSON.stringify({ method, qrPayload }) },
+  );
 }

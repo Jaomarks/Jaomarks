@@ -13,7 +13,8 @@ import {
   ChevronRightIcon,
 } from "@/components/icons";
 import { setLessonCompletionAction } from "@/app/actions/courses";
-import type { StudentLesson } from "@/lib/classroomio/student-client";
+import { confirmAttendanceAction } from "@/app/actions/attendance";
+import type { CheckinMethod, StudentLesson } from "@/lib/classroomio/student-client";
 
 const tabs = ["Aula", "Material", "Exercício"] as const;
 
@@ -38,8 +39,11 @@ function formatDuration(seconds?: number): string | null {
 
 type SectionLesson = { id: string; isComplete: boolean | null };
 
+type AttendanceStatus = "pending" | "confirmed" | "rejected" | null;
+
 export function LessonClient({
   courseSlug,
+  courseId,
   courseTitle,
   sectionIndex,
   lessonIndex,
@@ -47,8 +51,12 @@ export function LessonClient({
   nextLessonId,
   nextLessonTitle,
   lesson,
+  checkinMethods,
+  attendanceStatus,
+  attendanceMethod,
 }: {
   courseSlug: string;
+  courseId: string;
   courseTitle: string;
   sectionIndex: number;
   lessonIndex: number;
@@ -56,11 +64,32 @@ export function LessonClient({
   nextLessonId: string | null;
   nextLessonTitle: string | null;
   lesson: StudentLesson;
+  checkinMethods: CheckinMethod[];
+  attendanceStatus: AttendanceStatus;
+  attendanceMethod: CheckinMethod | null;
 }) {
   const [tab, setTab] = useState<(typeof tabs)[number]>("Aula");
   const [completed, setCompleted] = useState(lesson.completion?.isComplete ?? false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  const [attendance, setAttendance] = useState({ status: attendanceStatus, method: attendanceMethod });
+  const [attendanceError, setAttendanceError] = useState<string | null>(null);
+  const [attendancePending, startAttendanceTransition] = useTransition();
+  const canSelfConfirm = checkinMethods.includes("self_button");
+  const qrOnly = checkinMethods.includes("qr_code") && !canSelfConfirm;
+
+  function confirmPresence() {
+    setAttendanceError(null);
+    startAttendanceTransition(async () => {
+      const result = await confirmAttendanceAction(courseSlug, courseId, lesson.id, "self_button");
+      if ("error" in result) {
+        setAttendanceError(result.error);
+        return;
+      }
+      setAttendance({ status: result.status, method: result.method });
+    });
+  }
 
   const isAutoTracked = lesson.completionPolicy === "video_watch";
 
@@ -113,7 +142,36 @@ export function LessonClient({
             <span className="text-[12.5px] text-ink-secondary font-medium">
               Módulo {sectionIndex + 1} · Aula {lessonIndex + 1} de {sectionLessons.length}
             </span>
+            {attendance.status === "confirmed" && (
+              <span className="inline-flex items-center gap-1 bg-success-soft px-2.5 py-1 rounded-full">
+                <CheckIcon className="w-2.5 h-2.5 text-success" />
+                <span className="text-[10.5px] font-bold text-success">Presença confirmada</span>
+              </span>
+            )}
+            {attendance.status === "pending" && (
+              <span className="text-[10.5px] font-bold text-ink-secondary bg-bg px-2.5 py-1 rounded-full">
+                Presença enviada · aguardando confirmação
+              </span>
+            )}
+            {(attendance.status === null || attendance.status === "rejected") && canSelfConfirm && (
+              <button
+                type="button"
+                onClick={confirmPresence}
+                disabled={attendancePending}
+                className="text-[11px] font-bold text-accent bg-[#e8f2ff] px-2.5 py-1 rounded-full disabled:opacity-60"
+              >
+                {attendancePending
+                  ? "Confirmando..."
+                  : attendance.status === "rejected"
+                    ? "Confirmar presença novamente"
+                    : "Confirmar presença"}
+              </button>
+            )}
+            {qrOnly && attendance.status === null && (
+              <span className="text-[10.5px] text-ink-secondary">Presença por QR code no local</span>
+            )}
           </div>
+          {attendanceError && <p className="text-[11px] text-danger mt-1.5">{attendanceError}</p>}
         </div>
 
         <Segmented options={tabs} value={tab} onChange={(v) => setTab(v as (typeof tabs)[number])} />

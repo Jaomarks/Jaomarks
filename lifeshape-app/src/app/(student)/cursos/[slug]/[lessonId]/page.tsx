@@ -3,7 +3,13 @@ import { notFound } from "next/navigation";
 import { Card } from "@/components/ui";
 import { ChevronLeftIcon } from "@/components/icons";
 import { requireSession } from "@/lib/dal";
-import { ClassroomIOStudentError, getMyCourseDetail, getMyLesson, listMyCourses } from "@/lib/classroomio/student-client";
+import {
+  ClassroomIOStudentError,
+  getMyAttendance,
+  getMyCourseDetail,
+  getMyLesson,
+  listMyCourses,
+} from "@/lib/classroomio/student-client";
 import { findLessonInCourse } from "@/lib/classroomio/course-helpers";
 import { LessonClient } from "./lesson-client";
 
@@ -19,9 +25,17 @@ export default async function LessonPage({
   const summary = courses.find((c) => (c.slug ?? c.id) === slug);
   if (!summary) notFound();
 
-  const course = await getMyCourseDetail(token, summary.id);
+  const [course, attendance] = await Promise.all([
+    getMyCourseDetail(token, summary.id),
+    // Presença (Etapa 3) é uma camada adicional sobre a aula — se algo
+    // der errado aqui, a aula continua funcionando normalmente, só sem
+    // a seção de presença.
+    getMyAttendance(token, summary.id).catch(() => null),
+  ]);
   const located = findLessonInCourse(course, lessonId);
   if (!located) notFound();
+
+  const myAttendance = attendance?.lessons.find((item) => item.lessonId === lessonId) ?? null;
 
   // The listing above only reflects the raw "unlocked" admin toggle —
   // sequential-progression locks are only enforced here, when the lesson's
@@ -49,6 +63,7 @@ export default async function LessonPage({
   return (
     <LessonClient
       courseSlug={slug}
+      courseId={summary.id}
       courseTitle={course.title}
       sectionIndex={located.sectionIndex}
       lessonIndex={located.lessonIndex}
@@ -56,6 +71,9 @@ export default async function LessonPage({
       nextLessonId={located.nextLessonId}
       nextLessonTitle={located.nextLessonTitle}
       lesson={lesson}
+      checkinMethods={attendance?.checkinMethods ?? []}
+      attendanceStatus={myAttendance?.status ?? null}
+      attendanceMethod={myAttendance?.method ?? null}
     />
   );
 }
