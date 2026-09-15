@@ -17,6 +17,17 @@ export async function confirmAttendanceAction(
 ): Promise<ConfirmAttendanceResult> {
   const { token } = await requireSession();
 
+  // A Server Action compiles to a public POST endpoint reachable directly
+  // (devtools/fetch), not just through this file's own call sites — the
+  // "self_button" | "qr_code" TS union is erased at runtime and enforces
+  // nothing on its own. manual_desk is staff-only (the backend already
+  // rejects it independently — see student-attendance.ts — but this stays
+  // correct even if that ever changes, and fails closed for any other
+  // unexpected value too).
+  if (method !== "self_button" && method !== "qr_code") {
+    return { error: "Método de confirmação inválido." };
+  }
+
   try {
     const record = await confirmMyAttendance(token, courseId, lessonId, method, qrPayload);
 
