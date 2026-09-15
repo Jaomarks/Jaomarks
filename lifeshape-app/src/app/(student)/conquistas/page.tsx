@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { signOutAction } from "@/app/actions/auth";
 import { Card } from "@/components/ui";
 import {
   SearchIcon,
@@ -174,6 +175,12 @@ export default function ConquistasPage() {
       <Link href="/jornada" className="text-center text-[13px] font-semibold text-accent">
         Ver jornada completa
       </Link>
+
+      <form action={signOutAction} className="pt-2">
+        <button type="submit" className="w-full text-center text-[13px] font-semibold text-ink-secondary">
+          Sair da conta
+        </button>
+      </form>
     </div>
   );
 }
