@@ -8,6 +8,7 @@ import {
   getMyAttendance,
   getMyCourseDetail,
   getMyLesson,
+  getMyLessonExercises,
   listMyCourses,
 } from "@/lib/classroomio/student-client";
 import { findLessonInCourse } from "@/lib/classroomio/course-helpers";
@@ -25,12 +26,14 @@ export default async function LessonPage({
   const summary = courses.find((c) => (c.slug ?? c.id) === slug);
   if (!summary) notFound();
 
-  const [course, attendance] = await Promise.all([
+  const [course, attendance, exercises] = await Promise.all([
     getMyCourseDetail(token, summary.id),
     // Presença (Etapa 3) é uma camada adicional sobre a aula — se algo
     // der errado aqui, a aula continua funcionando normalmente, só sem
     // a seção de presença.
     getMyAttendance(token, summary.id).catch(() => null),
+    // Exercícios (Etapa 4) — mesma lógica: falha aqui não deve derrubar a aula.
+    getMyLessonExercises(token, lessonId).catch(() => []),
   ]);
   const located = findLessonInCourse(course, lessonId);
   if (!located) notFound();
@@ -74,6 +77,7 @@ export default async function LessonPage({
       checkinMethods={attendance?.checkinMethods ?? []}
       attendanceStatus={myAttendance?.status ?? null}
       attendanceMethod={myAttendance?.method ?? null}
+      exercises={exercises}
     />
   );
 }

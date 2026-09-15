@@ -14,7 +14,8 @@ import {
 } from "@/components/icons";
 import { setLessonCompletionAction } from "@/app/actions/courses";
 import { confirmAttendanceAction } from "@/app/actions/attendance";
-import type { CheckinMethod, StudentLesson } from "@/lib/classroomio/student-client";
+import type { CheckinMethod, LessonExercise, StudentLesson } from "@/lib/classroomio/student-client";
+import { ExercisePanel } from "./exercise-panel";
 
 const tabs = ["Aula", "Material", "Exercício"] as const;
 
@@ -54,6 +55,7 @@ export function LessonClient({
   checkinMethods,
   attendanceStatus,
   attendanceMethod,
+  exercises,
 }: {
   courseSlug: string;
   courseId: string;
@@ -67,6 +69,7 @@ export function LessonClient({
   checkinMethods: CheckinMethod[];
   attendanceStatus: AttendanceStatus;
   attendanceMethod: CheckinMethod | null;
+  exercises: LessonExercise[];
 }) {
   const [tab, setTab] = useState<(typeof tabs)[number]>("Aula");
   const [completed, setCompleted] = useState(lesson.completion?.isComplete ?? false);
@@ -210,14 +213,21 @@ export function LessonClient({
             <p className="text-[14px] text-ink-secondary">Nenhum material anexado nesta aula.</p>
           ))}
 
-        {tab === "Exercício" && (
-          <div className="bg-bg rounded-2xl p-4 flex flex-col gap-2">
-            <div className="text-[13.5px] font-semibold">Exercício desta aula</div>
-            <p className="text-[13.5px] text-ink-secondary leading-relaxed">
-              Exercícios e envio de respostas chegam em uma próxima etapa.
-            </p>
-          </div>
-        )}
+        {tab === "Exercício" &&
+          (exercises.length > 0 ? (
+            <div className="flex flex-col gap-3">
+              {exercises.map((exercise) => (
+                <ExercisePanel key={exercise.id} courseSlug={courseSlug} lessonId={lesson.id} exercise={exercise} />
+              ))}
+            </div>
+          ) : (
+            <div className="bg-bg rounded-2xl p-4 flex flex-col gap-2">
+              <div className="text-[13.5px] font-semibold">Exercício desta aula</div>
+              <p className="text-[13.5px] text-ink-secondary leading-relaxed">
+                Esta aula ainda não tem exercício.
+              </p>
+            </div>
+          ))}
 
         {nextLessonId && (
           <Link

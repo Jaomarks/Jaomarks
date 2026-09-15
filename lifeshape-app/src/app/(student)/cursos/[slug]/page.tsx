@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Card } from "@/components/ui";
-import { ChevronLeftIcon, CheckIcon, PlayIcon, BookIcon } from "@/components/icons";
+import { ChevronLeftIcon, ChevronRightIcon, CheckIcon, PlayIcon, BookIcon, BriefcaseIcon } from "@/components/icons";
 import { requireSession } from "@/lib/dal";
-import { getMyCourseDetail, listMyCourses } from "@/lib/classroomio/student-client";
+import { getMyCourseDetail, getMyInternship, listMyCourses } from "@/lib/classroomio/student-client";
 import { findNextIncompleteLesson, lessonSections } from "@/lib/classroomio/course-helpers";
 
 export default async function CourseDetailPage({
@@ -20,7 +20,13 @@ export default async function CourseDetailPage({
   const summary = courses.find((c) => (c.slug ?? c.id) === slug);
   if (!summary) notFound();
 
-  const course = await getMyCourseDetail(token, summary.id);
+  const [course, internship] = await Promise.all([
+    getMyCourseDetail(token, summary.id),
+    // Estágio/horas complementares (Etapa 4) — só existe se um coordenador
+    // configurou para este curso; se der errado aqui, o curso continua
+    // funcionando normalmente, só sem o card de estágio.
+    getMyInternship(token, summary.id).catch(() => ({ configured: false as const })),
+  ]);
   const sections = lessonSections(course);
   const nextUp = findNextIncompleteLesson(course);
 
@@ -52,6 +58,25 @@ export default async function CourseDetailPage({
           <div className="h-full bg-accent rounded-full" style={{ width: `${summary.progressPercent}%` }} />
         </div>
       </Card>
+
+      {internship.configured && (
+        <Link href={`/cursos/${slug}/estagio`}>
+          <Card className="p-4 flex items-center gap-3.5">
+            <div className="w-10 h-10 rounded-xl bg-bg flex items-center justify-center shrink-0">
+              <BriefcaseIcon className="w-[18px] h-[18px] text-ink" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[13.5px] font-semibold">Estágio e horas complementares</div>
+              <div className="text-[12px] text-ink-secondary mt-0.5">
+                {internship.totalApprovedWeeks > 0
+                  ? `${internship.totalApprovedWeeks} semana${internship.totalApprovedWeeks === 1 ? "" : "s"} aprovada${internship.totalApprovedWeeks === 1 ? "" : "s"}`
+                  : "Envie seu relatório e comprovante"}
+              </div>
+            </div>
+            <ChevronRightIcon className="w-4 h-4 text-ink-secondary shrink-0" />
+          </Card>
+        </Link>
+      )}
 
       {sections.length === 0 ? (
         <p className="text-[14px] text-ink-secondary">Este curso ainda não tem aulas publicadas.</p>
